@@ -7,7 +7,7 @@ conda env create -n egel python=3.8 && conda activate egel
 # Retrieve Results
 
 Run: Shell (not implemented yet)
-
+The plots will be saved to the content-plots folder. Each Plot provides its Class Expression, fidelity, accuracy and F1-measure directly on the PDF.
 
 
 # Structure of Code
