@@ -18,7 +18,7 @@ Run the Shell `./run_egel.sh`
 
 The plots will be saved to the `content/plots` folder. Each plot provides its Class Expression, fidelity, accuracy and F1-measure directly on the PDF. 
 
-The results for the hetero-bashapes dataset are be stored in the folders `BA2hop` and `BA4hop` for the results of a GNN trained with 2 layers and 4 layers, respectively.
+The results for the hetero-bashapes dataset are be stored in the folders `BA2hop` and `BA4hop` for the results of a GNN trained with 2 layers and 4 layers, respectively. For all graphs, a pdf with the ending "_wo_text" exists, this is the corresponding graph without text.
 
 
 
@@ -30,15 +30,15 @@ There is a long runtime for the DBLP dataset (1-2 days). Set run_DBLP="False" or
 The code generated the hetero-bashapes dataset and downloads the DBLP dataset, trains GNNs on top of these and produces class expressions and graphs as global explanations for labels of these datasets.
 
 
-main.py: File for running everything and visualizing results
+`main.py` File for running everything and visualizing results
 
-ce_generation.py: File with functions for generating class expressions
+`ce_generation.py` File with functions for generating class expressions
 
-graph_generation.py: File with functions for generating graphs from Class Expressions
+`graph_generation.py` File with functions for generating graphs from Class Expressions
 
-BaShapes_Hetero.py: File for generating the hetero BAShapes dataset
+`bashapes_hetero.py` File for generating the hetero BAShapes dataset
 
-BaShapes_Model.py: File with the training of the GNN for the BaShapes dataset
+`bashapes_model.py` File with the training of the GNN for the BaShapes dataset
 
 ## Parameters to set in .sh file
 
