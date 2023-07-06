@@ -5,7 +5,7 @@ using: Ubuntu 22.04 LTS:
 ```
 git clone https://github.com/A9B2C8D4/egel.git
 
-conda env create -n egel python=3.8
+conda env create -f environment.yml
 
 conda activate egel
 ```
