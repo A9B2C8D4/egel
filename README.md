@@ -6,8 +6,16 @@ conda env create -n egel python=3.8 && conda activate egel
 
 # Retrieve Results
 
-Run: Shell (not implemented yet)
+Run: Shell 
+
+Change Parameters in shell file:
+run_DBLP="True"
+run_BAShapes="True"
+random_seed=1
+iterations=1000
+
 The plots will be saved to the content-plots folder. Each Plot provides its Class Expression, fidelity, accuracy and F1-measure directly on the PDF.
+There is a long runtime for the DBLP dataset (will be fixed in the future). Set run_DBLP="False" or iterations to a lower number to retrieve results faster.
 
 
 # Structure of Code
@@ -19,7 +27,5 @@ BaShapes_Model.py: File with the training of the GNN for the BaShapes dataset
 
 
 # Get all Results:
-run shell ...
+run shell
 retrieve pdfs, with the pictures from the dataset
-
-set seed = ...., to generate different results
