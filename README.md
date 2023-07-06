@@ -6,7 +6,7 @@ conda env create -n egel python=3.8 && conda activate egel
 
 # Retrieve Results
 
-Run: Shell 
+Run: Shell ./run_egel.sh
 
 
 
