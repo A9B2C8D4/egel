@@ -43,10 +43,10 @@ The code generated the hetero-bashapes dataset and downloads the DBLP dataset, t
 ## Parameters to set in .sh file
 
 
-run_DBLP="True" if the DBLP Dataset should be evaluated
+`run_DBLP="True"` if the DBLP Dataset should be evaluated
 
-run_BAShapes="True" if the hetero-BAShapes Dataset should be evaluated
+`run_BAShapes="True"` if the hetero-BAShapes Dataset should be evaluated
 
-random_seed=1 to choose a random seed
+`random_seed=1` to choose a random seed
 
-iterations=1000 The number of Class Expressions created and tested.
+`iterations=1000` The number of Class Expressions created and tested.
