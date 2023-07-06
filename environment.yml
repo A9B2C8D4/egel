@@ -1,4 +1,4 @@
-name: ontolearn
+name: egel
 channels:
   - defaults
   - conda-forge
