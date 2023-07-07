@@ -30,7 +30,7 @@ There is a long runtime for the DBLP dataset (1-2 days). Set run_DBLP="False" or
 The code generated the hetero-bashapes dataset and downloads the DBLP dataset, trains GNNs on top of these and produces class expressions and graphs as global explanations for labels of these datasets.
 
 
-`main.py` File for running everything and visualizing results
+`main.py` File for running everything and visualizing results; the last lines are run by the shell script for reproducing the results.
 
 `ce_generation.py` File with functions for generating class expressions
 
