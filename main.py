@@ -779,7 +779,7 @@ bashapes = create_hetero_ba_houses(500,100)
 
 
 # train GNN
-modelHeteroBSM = bsm.train_GNN(False, bashapes)
+modelHeteroBSM = bsm.train_GNN(False, bashapes, layers)
 
 
 # random example graphs:
@@ -1077,4 +1077,9 @@ if run_DBLP:
 # ---------------------- evaluation HeteroBAShapes
 if run_BAShapes:
     delete_files_in_folder('content/plots/HeteroBAShapes')
+    # train GNN 2_hop
+    modelHeteroBSM = bsm.train_GNN(True, bashapes, layers=2)
+    create_ce_and_graphs_to_heterodataset(bashapes, modelHeteroBSM, 'HeteroBAShapes', '3', cat_to_explain = -1,  graphs_per_ce = 16, iterations = iterations, compute_acc=True, random_seed = random_seed)
+    # train GNN 4_hop
+    modelHeteroBSM = bsm.train_GNN(True, bashapes, layers=4)
     create_ce_and_graphs_to_heterodataset(bashapes, modelHeteroBSM, 'HeteroBAShapes', '3', cat_to_explain = -1,  graphs_per_ce = 16, iterations = iterations, compute_acc=True, random_seed = random_seed)
