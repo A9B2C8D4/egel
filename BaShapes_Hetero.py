@@ -49,8 +49,8 @@ def replace_random_zeros_with_one_or_three(input_list, prob_replace=0.07):
                 label_list.append(1)
     counter = Counter(input_list)
     # Iterate over the counter and print the values and their frequencies
-    for value, frequency in counter.items():
-        print(f"Value: {value}, Frequency: {frequency}")
+    #for value, frequency in counter.items():
+    #    print(f"Value: {value}, Frequency: {frequency}")
     return output_list, label_list
 
 

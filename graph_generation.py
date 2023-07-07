@@ -18,7 +18,7 @@ import colorsys
 import random
 import sys
 import copy
-random_seed = 3006
+random_seed = 1
 random.seed(random_seed)
 #utils
 def read_list_of_lists_from_file(filename):
@@ -85,17 +85,21 @@ def search_triples(typesearched, data):
                 list_type.append(list_cand)
     return(list_type)
 #graph generation
-def is_new_node_created(percent_new_node):
+def is_new_node_created(percent_new_node, random_seed = 88):
+    random_seed +=1
+    random.seed(random_seed)
     return random.random() < percent_new_node
 
 
-def random_meta_without_startn(startn, available_meta):
+def random_meta_without_startn(startn, available_meta, random_seed = 94):
     #find index for target_cat:
     nameind = 0
     for listind in range(0, len(available_meta) - 1):
         if available_meta[listind][0] == startn:
             nameind = listind
             break
+    random_seed +=1
+    random.seed(random_seed)
     rand_nr = randint(0, len(available_meta[nameind][1]) - 1)
     # create rest of metadata:
     return available_meta[nameind][1][rand_nr]
@@ -173,15 +177,17 @@ def create_graph_with_n_edges(target_type, num, percent_new_node, list_available
     else: return 'wrong input, need a number'
 
 
-def one_node_features(nodetype_list):
+def one_node_features(nodetype_list, random_seed = 180):
     rnd_feat_list = []
     for j in range(nodetype_list[2]):
+        random_seed +=1
+        random.seed(random_seed)
         rnd_feat_list.append(int(random.choice(nodetype_list[1])))
     tensor_features = torch.tensor(rnd_feat_list, dtype=torch.float)
     return tensor_features
 
 
-def all_node_features_one_type(nodename, dict_current_graph, hetdata):  
+def all_node_features_one_type(nodename, dict_current_graph, hetdata, random_seed = 190):  
     # call with the list for one nodetype, receive an appended random feature-vector
     node_info = heteroDatainfo(hetdata)[0]
     # obtain node_info_triplet for nodename
@@ -197,18 +203,18 @@ def all_node_features_one_type(nodename, dict_current_graph, hetdata):
         # for each node: call one_node_features
         # save the obtained tensors to a list
     for _ in range(num_nodes):
-        list_node_features.append(one_node_features(node_info_triplet))
+        list_node_features.append(one_node_features(node_info_triplet, random_seed))
     # make a feature_matrix for this node_type
     feature_tensor_matrix = torch.stack(list_node_features)
     return feature_tensor_matrix
 
 
-def create_features_to_dict(graph_dict, origdata):
+def create_features_to_dict(graph_dict, origdata, random_seed = 212):
     features_list = []
     # list of available nodetypes:
     listntypes = dgl.heterograph(graph_dict).ntypes
     for nodename in listntypes:
-        features_list.append([nodename,all_node_features_one_type(nodename, graph_dict, origdata)])
+        features_list.append([nodename,all_node_features_one_type(nodename, graph_dict, origdata, random_seed)])
     # features_list = [nodetype, features]
     return graph_dict, features_list
 
@@ -473,159 +479,6 @@ def compute_confusion_house(dict_graph):
                         break
             if checkpoint == 22:
                 break              
-    '''
-    if ('3', 'to', '2') in dict_graph:
-        
-        start_values = dict_graph[('3', 'to', '2')][0].tolist()
-        end_values = dict_graph[('3', 'to', '2')][1].tolist()
-        #count_start = start_values.count(0)
-        if 0 in start_values:
-            tp +=1
-            fn -=1
-            fp -=1
-        
-            indices = []
-            for index, value in enumerate(start_values):
-                if value == 0:
-                    indices.append(index)
-                    checkpoint = 1
-
-            indices_end_threetwo = []
-            for _ in indices:
-                indices_end_threetwo.append(end_values[_])
-            if len(indices_end_threetwo) >= 2:
-                tp +=1
-                fn -=1
-                fp -=1
-    #continue with the path ('2', 'to', '2') 
-    if checkpoint == 1 and ('2', 'to', '2') in dict_graph:
-        start_values = dict_graph[('2', 'to', '2')][0].tolist()
-        end_values = dict_graph[('2', 'to', '2')][1].tolist()
-        values_two_two = list()
-        if len(indices_end_threetwo) >= 1:
-            for index, value in enumerate(start_values):
-                if value in indices_end_three_two:
-                    values_two_two.append(end_values[index])
-                    checkpoint = 2
-                    tp +=1
-                    fn -=1
-                    fp -=1
-    #check also for ('2', 'to', '1')
-    if checkpoint == 1 and ('2', 'to', '1') in dict_graph:
-        start_values = dict_graph[('2', 'to', '1')][0].tolist()
-        end_values = dict_graph[('2', 'to', '1')][1].tolist()
-        #check first, if an ege leaves from two different 3-2 edges
-        pairs_local = list()
-    if checkpoint == 1 and ('2', 'to', '1') in dict_graph:
-        start_values = dict_graph[('2', 'to', '1')][0].tolist()
-        end_values = dict_graph[('2', 'to', '1')][1].tolist()
-        #check first, if an ege leaves from two different 3-2 edges
-        pairs_local = list()
-        if len(indices_end_threetwo) >=1:
-            for index, value in enumerate(start_values):
-                if value in indices_end_threetwo:
-                    pairs_local.append([value, end_values[index]])
-        indices_two_one = dict()
-        for pair in pairs_local:
-            key = pair[0]
-            value = pair[1]
-            if key in indices_two_one:
-                indices_two_one[key].append(value)
-            else:
-                indices_two_one[key] = [value]
-        checkpoint = 3
-        tp +=1
-        fn -=1
-        fp -=1
-        if len(pairs_local) >=2:
-            tp +=1
-            fn -=1
-            fp -=1
-    # TODO: this does not work for 3-2-1-1 somehow
-    
-    if checkpoint == 3 and ('1', 'to', '1') in dict_graph:
-        start_values = dict_graph[('1', 'to', '1')][0].tolist()
-        end_values = dict_graph[('1', 'to', '1')][1].tolist()
-        count_match = 0
-        if len(indices_two_one) == 1:
-            for key, indices in indices_two_one.items():
-                for index, value in enumerate(start_values):
-                    if value in indices:
-                        count_match = 1
-        if len(indices_two_one) >= 2:
-            #find a matching edge
-            for index, value in enumerate(start_values):    
-                for key, indices in indices_two_one.items():
-                    if value in indices:
-                        for keytwo, indicestwo in indices_two_one.items():
-                            if key != keytwo and value in indicestwo:
-                                count_match = 1
-                                break
-        if count_match == 1:
-            tp +=1
-            fn -=1
-            fp -=1
-    #add unconnected edges
-    if checkpoint == 0 and ('3', 'to', '0') in dict_graph  and ('0', 'to', '1') in dict_graph and ('1', 'to', '1') in dict_graph:
-        start_values = dict_graph[('3', 'to', '0')][0].tolist()
-        end_values = dict_graph[('3', 'to', '0')][1].tolist()
-        #count_start = start_values.count(0)
-        if 0 in start_values:
-            indices_to = list()
-            for index, value in enumerate(start_values):
-                if value == 0:
-                    indices_to.append(end_values[index])
-            start_ones = dict_graph[('0', 'to', '1')][0].tolist()
-            end_ones = dict_graph[('0', 'to', '1')][1].tolist()
-            indices_toto = list()
-            for index, value in enumerate(start_ones):
-                if value in indices_to:
-                    indices_toto.append(end_ones[index])
-            for index in indices_toto:
-                if index in dict_graph[('1', 'to', '1')][0].tolist():
-                    tp +=1
-                    fn-=1
-                    fp-=1
-    if checkpoint == 0 and ('3', 'to', '1') in dict_graph and ('1', 'to', '1') in dict_graph:
-        start_values = dict_graph[('3', 'to', '1')][0].tolist()
-        end_values = dict_graph[('3', 'to', '1')][1].tolist()
-        start_ones = dict_graph[('1', 'to', '1')][0].tolist()
-        end_ones = dict_graph[('1', 'to', '1')][1].tolist()
-        if 0 in start_values:
-            indices_to = list()
-            for index, value in enumerate(start_values):
-                if value == 0:
-                    indices_to.append(end_values[index])
-            indices_toto = list()
-            for index, value in enumerate(start_ones):
-                if value in indices_to:
-                    indices_toto.append(end_ones[index])
-            for index in indices_toto:
-                if index in dict_graph[('1', 'to', '1')][0].tolist():
-                    tp +=1
-                    fn-=1
-                    fp-=1
-        #check, if there is an edge 3-0-1-1
-    if checkpoint == 0 and ('3', 'to', '3') in dict_graph and ('3', 'to', '1') in dict_graph and ('1', 'to', '1') in dict_graph:
-        start_values = dict_graph[('3', 'to', '3')][0].tolist()
-        end_values = dict_graph[('3', 'to', '3')][1].tolist()
-        start_ones = dict_graph[('3', 'to', '1')][0].tolist()
-        end_ones = dict_graph[('3', 'to', '1')][1].tolist()
-        if 0 in start_values:
-            indices_to = list()
-            for index, value in enumerate(start_values):
-                if value == 0:
-                    indices_to.append(end_values[index])
-            indices_toto = list()
-            for index, value in enumerate(start_ones):
-                if value in indices_to:
-                    indices_toto.append(end_ones[index])
-            for index in indices_toto:
-                if index in dict_graph[('1', 'to', '1')][0].tolist():
-                    tp +=1
-                    fn-=1
-                    fp-=1
-    '''
     return tp,fp,fn    
    
 def compute_accu(tp=0, fp=0, fn=0, tn = 0):
@@ -641,11 +494,12 @@ def add_features_and_predict_outcome(examples_to_test,
                                              graph_dict,
                                              filename,
                                              ce_str = None,
-                                             compute_acc = False
+                                             compute_acc = False,
+                                             random_seed = 650
                                              ):
     for _ in range(examples_to_test):
         #graph_dict = create_graph_with_n_edges(target, number_edges_of_each_sample, percent_new_node, list_available_meta)
-        features_list = create_features_to_dict(graph_dict, data)[1]
+        features_list = create_features_to_dict(graph_dict, data, random_seed)[1]
         hd = graphdict_and_features_to_heterodata(graph_dict, features_list)
         local_list = []
         mean_pred = 0.0
@@ -654,7 +508,7 @@ def add_features_and_predict_outcome(examples_to_test,
             out = model(hd.x_dict, hd.edge_index_dict)
             result = round(out[0][cat_to_explain].item(), 2)
             mean_pred += out[0][cat_to_explain].item()
-            local_list.append([[graph_dict, features_list] , result, ce_str])
+            local_list.append([[graph_dict, features_list], result, ce_str])
             #list_results.append([[graph_dict, features_list] , result, ce_str])
         except Exception as e:
             print(f"244 Here we skiped the error: {e}")

@@ -1,7 +1,7 @@
 #import GNN_playground #this is only locally important
 #print('GNN_playground durchgelaufen')
-import BaShapes_Model as bsm
-from BaShapes_Hetero import create_hetero_ba_houses
+import bashapes_model as bsm
+from bashapes_hetero import create_hetero_ba_houses
 from graph_generation import create_graphs_for_heterodata, add_features_and_predict_outcome, compute_accu, compute_prediction_ce, compute_confusion_for_ce_line, compute_f1
 from ce_generation import create_graphdict_from_ce, length_ce, create_test_ce, generate_cedict_from_ce
 from ce_generation import create_random_ce_from_BAHetero, create_random_ce_from_metagraph, remove_front
@@ -35,12 +35,33 @@ import warnings
 import sys
 import copy
 import pandas as pd
+import re
 
 warnings.filterwarnings("ignore")
 warnings.filterwarnings("ignore", message=".*findfont.*")
 dlsr = DLSyntaxObjectRenderer()
 #random_seed = 3006
 #random.seed(random_seed)
+
+
+
+run_DBLP = sys.argv[1]
+run_BAShapes = sys.argv[2]
+random_seed = int(sys.argv[3])
+iterations = int(sys.argv[4])
+if run_DBLP == "True":
+    run_DBLP = True
+else:
+    run_DBLP = False
+if run_BAShapes == "True":
+    run_BAShapes = True
+else:
+    run_BAShapes = False
+
+
+print(run_DBLP, run_BAShapes)
+#sys.exit()
+
 
 
 
@@ -155,15 +176,47 @@ target = 'author'
 
 
 #utils # From https://stackoverflow.com/questions/13852700
+'''
 def uniquify(path):
     filename, extension = os.path.splitext(path)
     counter = 1
 
     while os.path.exists(path):
-        path = filename + " (" + str(counter) + ")" + extension
+        path = filename + "_" + str(counter) + extension
         counter += 1
 
     return path
+'''
+
+
+def uniquify(path, extension = '.pdf'):
+    if path.endswith("_"):
+        path += '1'
+        counter = 1
+    while os.path.exists(path+extension):
+        counter +=1
+        while path and path[-1].isdigit():
+            path = path[:-1]
+        path +=str(counter)
+    return path
+
+
+
+def remove_integers_at_end(string):
+    pattern = r'\d+$'  # Matches one or more digits at the end of the string
+    result = re.sub(pattern, '', string)
+    return result
+
+
+def get_last_number(string):
+    pattern = r'\d+$'  # Matches one or more digits at the end of the string
+    match = re.search(pattern, string)
+    if match:
+        last_number = match.group()
+        return int(last_number)
+    else:
+        return None
+
 
 
 def delete_files_in_folder(folder_path):
@@ -207,7 +260,7 @@ def select_ones(numbers, num_ones_to_keep):
     return numbers
 
 
-def ce_fidelity(ce_for_fid, modelfid, datasetfid, node_type_expl, label_expl = -1): 
+def ce_fidelity(ce_for_fid, modelfid, datasetfid, node_type_expl, label_expl = -1, random_seed = 217): 
     fid_result = -1
     mask = datasetfid[node_type_expl]['test_mask']
     mask_tf = 0
@@ -238,13 +291,15 @@ def ce_fidelity(ce_for_fid, modelfid, datasetfid, node_type_expl, label_expl = -
         cedict = generate_cedict_from_ce(ce_for_fid)
         #mask = select_ones(mask, 100)
         # create new vector with samples only as true vector
-        #random.seed(236)
+        random_seed +=1
+        random.seed(random_seed)
         smaller_mask = random.sample(mask.tolist(), k=min(200, len(mask.tolist())))
         mask = torch.tensor(smaller_mask)
     else:
         print('252, dblp')
         indices_of_ones = [i for i, value in enumerate(mask.tolist()) if value == True]
-        #random.seed(257)
+        random_seed +=1
+        random.seed(random_seed)
         chosen_indices = random.sample(indices_of_ones, k=min(200, len(indices_of_ones)))
         mask = [i if i in chosen_indices else 0 for i in range(len(mask.tolist()))]
         mask = [x for x in mask if x != 0]
@@ -552,17 +607,24 @@ def visualize_heterodata(hd, addname = '', ce = None, gnnout = None, mean_acc = 
     caption_position = (0.5, 0.1)  # Adjust the position as per your requirements
     
     
-    #show plt
-    name_plot_save = 'content/plots/graph'+addname+'wo_text'+'.pdf'
-    name_plot_save = uniquify(name_plot_save)
-    plt.savefig(name_plot_save, bbox_inches='tight', format="pdf")
+    #folder to save in:
+    folder = remove_integers_at_end(addname)
+    number_ce = get_last_number(addname)
+    print(folder, number_ce)
+    
+    #goal: ce_name_1_graph_3
+    name_plot_save = 'content/plots/'+folder+'/ce_'+folder+'_'+str(number_ce)+'_graph_'
+    name_plot_save = uniquify(name_plot_save, '_wo_text.pdf')
+    #name_plot_save = name_plot_save.replace(".pdf", "")
+    #name_plot_save += 'wo_text.pdf'
+    plt.savefig(name_plot_save+'_wo_text.pdf', bbox_inches='tight', format="pdf")
     plt.legend(patch_list, name_list)
     plt.figtext(*caption_position, caption_text, ha='center')#, size = caption_size)
     
     #plt.figure()
-    name_plot_save = 'content/plots/graph'+addname+'.pdf'
+    #name_plot_save = 'content/plots/'+folder+'/'+'graph'+addname+'.pdf'
     name_plot_save = uniquify(name_plot_save)
-    plt.savefig(name_plot_save, bbox_inches='tight', format="pdf")
+    plt.savefig(name_plot_save+'.pdf', bbox_inches='tight', format="pdf")
     #plt.show()
     
     
@@ -600,13 +662,13 @@ def visualize_best_results(num_top, saved_list, addname = '', list_all_nodetypes
             print(291, i, saved_list[i])
            ''' 
 
-def visualize_best_ces(num_top_ces, num_top_graphs, list_of_results_ce = list(), list_all_nodetypes = None, label_to_explain = None, ml = None, ds = None, node_expl = None, plotname = 'any'):
+def visualize_best_ces(num_top_ces, num_top_graphs, list_of_results_ce = list(), list_all_nodetypes = None, label_to_explain = None, ml = None, ds = None, node_expl = None, plotname = 'any', random_seed = 615):
     #for each CE: visualize num_top_graphs by saving them under a unique name
     #aufbau: [graphs, ce]
     num_top_ces = min(num_top_ces, len(list_of_results_ce))
     for ind_ce in range(num_top_ces):
         if ml != None and ds != None and node_expl != None:
-            ce_fid = ce_fidelity(list_of_results_ce[ind_ce][5], modelfid=ml, datasetfid = ds, node_type_expl = node_expl)
+            ce_fid = ce_fidelity(list_of_results_ce[ind_ce][5], modelfid=ml, datasetfid = ds, node_type_expl = node_expl, random_seed = random_seed)
             print(378, ce_fid)
         else:
             ce_fid = -1
@@ -678,9 +740,8 @@ def test_ce_prediction():
     
     
     
-    
-# ------- Start: Delete old graph-pdfs from content/plots folder
-delete_files_in_folder('content/plots')
+
+
 
 # ----------------- Evaluate and visualize examples from DBLP Dataset
 hd = data
@@ -792,7 +853,7 @@ def ce_score_fct(ce, list_gnn_outs, lambdaone, lambdatwo):
 
 
 
-def create_ce_and_graphs_to_heterodataset(hd, model, dataset_name, target_class, cat_to_explain = -1, graphs_per_ce = 100, iterations = 300, compute_acc = False):
+def create_ce_and_graphs_to_heterodataset(hd, model, dataset_name, target_class, cat_to_explain = -1, graphs_per_ce = 10, iterations = 30, compute_acc = False, random_seed = 806):
     saved_graphs_ces = "content/created_graphs/"+'CEs_for_' + dataset_name
     #node types
     node_types = hd.node_types
@@ -801,20 +862,22 @@ def create_ce_and_graphs_to_heterodataset(hd, model, dataset_name, target_class,
     for mp in metagraph:
         if mp[1] not in edge_names:
             edge_names.append(mp[1])
-    list_length_of_ce = [6,7,8]
+    list_length_of_ce = [3,4,5,6,7,8]
     result_graphs = list()
     result_graphs_acc = list()
     result_ces = list()
     for _ in range(iterations):
         #try:
+        random_seed +=9900
+        random.seed(random_seed)
         len_ce = random.choice(list_length_of_ce)
-        ce_here = create_random_ce_from_metagraph(len_ce, metagraph, target_class)
+        ce_here = create_random_ce_from_metagraph(len_ce, metagraph, target_class, random_seed)
         local_dict_results = dict()
         local_dict_results['acc'] = []
         local_dict_results['f'] = []
         local_dict_results['GNN_outs'] = []
         for griter in range(graphs_per_ce):
-            dict_graph = create_graphdict_from_ce(ce_here, node_types, edge_names, metagraph) #possible nodes, edges have to be transmitted; features can be completed afterwards
+            dict_graph = create_graphdict_from_ce(ce_here, node_types, edge_names, metagraph, random_seed) #possible nodes, edges have to be transmitted; features can be completed afterwards
             #on all: Calculate gnn and save the outs
             ce_str = ce_here
             try:
@@ -822,8 +885,7 @@ def create_ce_and_graphs_to_heterodataset(hd, model, dataset_name, target_class,
             except Exception as e:
                 print(f"789 Here we skiped the error: {e}")
             list_results = list()
-            result = add_features_and_predict_outcome(1 ,cat_to_explain,  model, hd, list_results, dict_graph, saved_graphs_ces, ce_str = ce_str, compute_acc=compute_acc)
-            print(826, result)
+            result = add_features_and_predict_outcome(1 ,cat_to_explain,  model, hd, list_results, dict_graph, saved_graphs_ces, ce_str = ce_str, compute_acc=compute_acc, random_seed=random_seed)
             local_dict_results['GNN_outs'].append(result[0][1])
             # calculate accuracy
             local_dict_results['acc'].append(result[0][3])
@@ -845,20 +907,16 @@ def create_ce_and_graphs_to_heterodataset(hd, model, dataset_name, target_class,
         max_graph_acc = max(list_accs)
         list_f =  [inner_list[2] for inner_list in local_dict_results['f']]
         fscore = max(list_f)
-
-
-
-
-
-
-
-
-
-
         #print(530, list_accs, avg_graph_acc, len(list_accs), sum(list_accs))
         #idea: create 10 example graphs and save top 3 graphs here
         local_result_ce = [ce_here, score, avg_graph_acc, max_graph_acc, fscore]
-        result_ces.append(local_result_ce)
+        print(883, dlsr.render(ce_here))
+        add_ce = True
+        for ce_prev in result_ces:
+            if ce_prev[0] == ce_here:
+                add_ce = False
+        if add_ce == True:
+            result_ces.append(local_result_ce)
         '''
         dict_graph = {('3', 'to', '2') :(torch.tensor([0], dtype = torch.long), 
             torch.tensor([0], dtype = torch.long)),
@@ -876,7 +934,9 @@ def create_ce_and_graphs_to_heterodataset(hd, model, dataset_name, target_class,
             print(f"838 Here we skiped the error: {e}")
         #add features
         list_results = list()
-        new_graph = add_features_and_predict_outcome(1 ,cat_to_explain,  model, hd, list_results, dict_graph, saved_graphs_ces, ce_str = ce_str,compute_acc=compute_acc)
+        random_seed +=10
+        random.seed(random_seed)
+        new_graph = add_features_and_predict_outcome(1 ,cat_to_explain,  model, hd, list_results, dict_graph, saved_graphs_ces, ce_str = ce_str,compute_acc=compute_acc, random_seed = random_seed)
         result_graphs += new_graph
         result_graphs = sorted(result_graphs, key=lambda x: x[1], reverse = True)
         #except Exception as e:
@@ -885,6 +945,8 @@ def create_ce_and_graphs_to_heterodataset(hd, model, dataset_name, target_class,
     #get 5 best ces and create 10 sample graphs for each of them
     result_ces = sorted(result_ces, key=lambda x: x[1], reverse = True)
     local_graphs_for_ce = list()
+    random_seed = 7
+    random.seed(random_seed)
     total_graph_to_ce_list = list()
     '''
     for ceindex in range(iterations):
@@ -920,11 +982,11 @@ def create_ce_and_graphs_to_heterodataset(hd, model, dataset_name, target_class,
         except Exception as e:
                     print(f"881 Here we skiped the error: {e}")
     '''
-    for ceindex in range(iterations):
+    for ceindex in range(len(result_ces)):
         local_graphs_for_ce = list()
         cel_best = result_ces[ceindex][0]
-
         # HERE compute fidelity!
+        print(953, dlsr.render(cel_best))
 
         #a) create a new BA-Shapes Dataset
         #b) compute GNN on test-set
@@ -942,15 +1004,19 @@ def create_ce_and_graphs_to_heterodataset(hd, model, dataset_name, target_class,
             print(f"870 Here we skiped the error: {e}")
         dict_graph = dict()
         new_graph = list()
-        for _ in range(16):
-            dict_graph = create_graphdict_from_ce(cel_best, node_types, edge_names, metagraph)
-            new_graph = add_features_and_predict_outcome(1 ,cat_to_explain,  model, hd, list(), dict_graph, saved_graphs_ces, ce_str = cel_str,compute_acc=compute_acc)
+        for _ in range(5):
+            random_seed +=1700
+            random.seed(random_seed)
+            dict_graph = create_graphdict_from_ce(cel_best, node_types, edge_names, metagraph, random_seed)
+            random_seed +=1
+            random.seed(random_seed)
+            new_graph = add_features_and_predict_outcome(1 ,cat_to_explain,  model, hd, list(), dict_graph, saved_graphs_ces, ce_str = cel_str,compute_acc=compute_acc, random_seed = random_seed)
             local_graphs_for_ce += new_graph
         local_graphs_for_ce = sorted(local_graphs_for_ce, key=lambda x: x[1], reverse = True)
         total_graph_to_ce_list.append([local_graphs_for_ce, cel_str,ce_score, ce_avg_graph, ce_max_graph, ce_f,cel_best])
-        print(576, cel_str,ce_score, ce_avg_graph, ce_max_graph)
+    print(576, cel_str,ce_score, ce_avg_graph, ce_max_graph)
     total_graph_to_ce_list = sorted(total_graph_to_ce_list, key=lambda x: x[2], reverse = True)
-    visualize_best_ces(num_top_ces = 6, num_top_graphs = 8, list_of_results_ce = total_graph_to_ce_list, list_all_nodetypes = node_types, label_to_explain = target_class, ml=model, ds=hd, node_expl = target_class, plotname = dataset_name)
+    visualize_best_ces(num_top_ces = 6, num_top_graphs = 3, list_of_results_ce = total_graph_to_ce_list, list_all_nodetypes = node_types, label_to_explain = target_class, ml=model, ds=hd, node_expl = target_class, plotname = dataset_name, random_seed = random_seed)
     #visualize results in an own function using total_graph_to_ce_list
     
         
@@ -993,95 +1059,22 @@ def create_ce_and_graphs_to_heterodataset(hd, model, dataset_name, target_class,
 ce_test = create_test_ce()[1] #3-1-2
 #print(919, dlsr.render(ce_test))
 #ce_confusion(ce_test, motif = 'house') #should output 0
+
     
     
     
-    
+
+
+
 #---------------------- evaluation DBLP 
 # this does not work accordingly
-#create_ce_and_graphs_to_heterodataset(datadblp, modeldblp, 'DBLP', 'author', cat_to_explain = -1,  graphs_per_ce = 16, iterations = 50,compute_acc=False)
+random_seed = 3006
+if run_DBLP:
+    delete_files_in_folder('content/plots/DBLP')
+    create_ce_and_graphs_to_heterodataset(datadblp, modeldblp, 'DBLP', 'author', cat_to_explain = -1,  graphs_per_ce = 16, iterations = iterations, compute_acc=False, random_seed = random_seed)
     
     
 # ---------------------- evaluation HeteroBAShapes
-    
-    
-create_ce_and_graphs_to_heterodataset(bashapes, modelHeteroBSM, 'HeteroBAShapes', '3', cat_to_explain = -1,  graphs_per_ce = 16, iterations = 1000, compute_acc=True)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# --------------------------------- test
-
-def test_ce_and_graph_creation(hd, model, dataset_name, target_class, cat_to_explain = -1):
-    
-    
-    node_types = hd.node_types
-    metagraph = hd.edge_types #[str,str,str]
-    edge_names = []
-    
-    for mp in metagraph:
-        if mp[1] not in edge_names:
-            edge_names.append(mp[1])
-    ce_test = create_random_ce_from_metagraph(6, metagraph, target_class)
-    print(611, dlsr.render(ce_test))
-    dict_graph = create_graphdict_from_ce(ce_test, node_types, edge_names, metagraph)
-    print(619, dict_graph)
-#for _ in range(7):
-#    test_ce_and_graph_creation(bashapes, modelHeteroBSM, 'HeteroBAShapes', '3', cat_to_explain = -1)
-    
-
-#dblp
-
-
-# not working yet, but maybe will one day.
-target_category_DBLP = 'conference'
-dataset = DBLP(path, transform=T.Constant(node_types=target_category_DBLP))
-target_category_DBLP = 'author'  # we want to predict classes of author
-# 4 different classes for author:
-#   database, data mining, machine learning, information retrieval.
-data = dataset[0]
-model = HeteroGNN(data.metadata(), hidden_channels=32, out_channels=4,
-                  num_layers=3)
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-data, model = data.to(device), model.to(device)
-
-
-
-target_node_type_to_explain = 'author'
-cat_to_explain = 3
-filename = "content/created_graphs/"+'DBLP'
-
-
-
-#create_ce_and_graphs_to_heterodataset(data, model, 'DBLP', target_class = target_node_type_to_explain, cat_to_explain = cat_to_explain, iterations = 2)
+if run_BAShapes:
+    delete_files_in_folder('content/plots/HeteroBAShapes')
+    create_ce_and_graphs_to_heterodataset(bashapes, modelHeteroBSM, 'HeteroBAShapes', '3', cat_to_explain = -1,  graphs_per_ce = 16, iterations = iterations, compute_acc=True, random_seed = random_seed)
