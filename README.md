@@ -22,9 +22,6 @@ The results for the hetero-bashapes dataset are be stored in the folders `BA2hop
 
 
 
-There is a long runtime for the DBLP dataset (1-2 days). Set run_DBLP="False" or iterations to a lower number to get results faster.
-
-
 ## Structure of Code
 
 The code generated the hetero-bashapes dataset and downloads the DBLP dataset, trains GNNs on top of these and produces class expressions and graphs as global explanations for labels of these datasets.
