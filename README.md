@@ -40,7 +40,7 @@ There is a vast summary of files, but only some are important:
 
 `evaluation` describes the scoring function for beam search, as well as accuracy and fidelity.
 
-`datasets.py` describes the generation of the dataset heteroBAShapes.
+`datasets.py` describes the generation of the dataset heteroBAShapes; Although several motifs (beside the house motif) are possible to set as a parameter.
 
 `visualization.py` describes all functions needed to visualize the results.
 
@@ -55,16 +55,12 @@ There is a vast summary of files, but only some are important:
 
 The dataset is fixed to the HeteroBAShaped dataset.
 
-`layers` Set to 2 or 4, depending if you want to use a 2-hop or 4-hop neighborhood
+`end_length` The maximal length of the CEs
 
 `number_of_ces` gives the number of CEs to pass each beam search iteration  
 
 `number_of_graphs` gives the number of different graphs, created to each CE
 
-`start_length ` gives the number of classes for the CEs to start beam search
+`lambdaone ` The lambda for regularisation
 
-`iterations=1000` The number of Class Expressions created and tested.
-
-#### Hyperparameters
-`lambdaone` Gives the regularization parameter for the length of the CE
-`lambdatwo` Gives the regularization parameter for the empirical variance of the CE on the corresponding graphs (not used or explained in the paper)
+`random_seed` The random seed, normally set to 1.
