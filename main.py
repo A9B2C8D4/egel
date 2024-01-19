@@ -2,10 +2,13 @@
 # print('GNN_playground durchgelaufen')
 import bashapes_model as bsm
 from datasets import create_hetero_ba_houses, initialize_dblp
+from datasets import HeteroBAMotifDataset, GenerateRandomGraph, GraphMotifAugmenter
 from generate_graphs import get_number_of_hdata, get_gnn_outs
 from create_random_ce import random_ce_with_startnode, get_graph_from_ce, mutate_ce, length_ce, length_ce, fidelity_ce_testdata, replace_property_of_fillers
 from visualization import visualize_hd
-from evaluation import ce_score_fct, ce_confusion_iterative, ce_fidelity
+from evaluation import ce_score_fct, ce_confusion_iterative, fidelity_el, ce_fast_instance_checker, Accuracy_El
+from models import HeteroGNNModel, HeteroGNNTrainer
+from bashapes_model import HeteroGNNBA
 import torch
 import statistics
 # from dgl.data.rdf import AIFBDataset, AMDataset, BGSDataset, MUTAGDataset
@@ -56,36 +59,30 @@ random.seed(random_seed)
 
 # -------- include values from shell script
 try:
-    run_DBLP = sys.argv[1]
-    run_BAShapes = sys.argv[2]
-    random_seed = int(sys.argv[3])
-    iterations = int(sys.argv[4])
-    if run_DBLP == "True":
-        run_DBLP = True
-    else:
-        run_DBLP = False
-    if run_BAShapes == "True":
-        run_BAShapes = True
-    else:
-        run_BAShapes = False
+    end_length = sys.argv[1]
+    number_of_ces = sys.argv[2]
+    number_of_graphs = int(sys.argv[3])
+    lambdaone = int(sys.argv[4])
+    random_seed = int(sys.argv[5])
+
 except Exception as e:
     print(f"Error deleting file: {e}")
-    run_DBLP = False
-    run_BAShapes = True
+    end_length = 10
+    number_of_ces = 300
+    number_of_graphs = 10
+    lambdaone = 0.5  # controls the length of the CE
     random_seed = 1
-    iterations = 3  # not implemented in newer version !!
 # Further Parameters:
 train_new_GNN = True
 layers = 2  # 2 or 4 for the bashapes hetero dataset
 start_length = 2
-end_length = 10
-number_of_ces = 200
-number_of_graphs = 10
-num_top_results = 10
+
+num_top_results = 5
 save_ces = True  # Debugging: if True, creates new CEs and save the CEs to hard disk
 # hyperparameters for scoring
-lambdaone = 0.5  # controls the length of the CE
-lambdatwo = 0.0  # controls the variance in the CE output on the different graphs for one CE
+
+lambdatwo = 0  # controls the variance in the CE output on the different graphs for one CE
+aggr_fct = 'mean'  # 'max' or 'mean'
 
 
 # ----------------  utils
@@ -216,17 +213,20 @@ def beam_search(hd, model, target_class, start_length, end_length, number_of_ces
     for mp in metagraph:
         edge_ces.append([OWLObjectProperty(IRI(NS, mp[1]))])
     for nt in hd.node_types:
-        node_types.append(OWLClass(IRI(NS, nt)))
+        assert isinstance(nt, str), (nt, "This is not a string, but should be")
+        nt_str = str(nt)  # debugging: Ensure only strings are used
+        node_types.append(OWLClass(IRI(NS, nt_str)))
     list_results = []
     for _ in range(number_of_ces):
         local_dict_results = dict()
         ce_here = random_ce_with_startnode(length=start_length, typestart=OWLClass(
             IRI(NS, target_class)), list_of_classes=node_types, list_of_edge_types=edge_ces)
+        assert isinstance(ce_here, OWLClassExpression), (ce_here, "This is not a Class Expression")
         local_dict_results['CE'] = ce_here
         list_graphs = get_number_of_hdata(ce_here, hd, num_graph_hdata=number_of_graphs)
         local_dict_results['GNN_outs'] = list()
         for graph in list_graphs:
-            gnn_out = get_gnn_outs(graph, model, -1)
+            gnn_out = get_gnn_outs(graph, model, target_class)
             local_dict_results['GNN_outs'].append(gnn_out)
         score = ce_score_fct(ce_here, local_dict_results['GNN_outs'], lambdaone, lambdatwo)
         local_dict_results['score'] = score
@@ -238,19 +238,24 @@ def beam_search(hd, model, target_class, start_length, end_length, number_of_ces
         new_list = list()
         for ce in list_results:
             ce_here = copy.deepcopy(ce['CE'])
+
             ce_here = mutate_ce(ce_here, node_types, edge_ces)
             local_dict_results = dict()
             local_dict_results['CE'] = ce_here
             list_graphs = get_number_of_hdata(
                 ce_here, hd, num_graph_hdata=number_of_graphs)  # is some hdata object now
+            assert len(list_graphs) == number_of_graphs, (len(list_graphs), number_of_graphs)
             local_dict_results['graphs'] = list_graphs
             local_dict_results['GNN_outs'] = list()
+
             for graph in list_graphs:
                 # generate output of GNN
                 # generate the results for acc, f, ...
                 gnn_out = get_gnn_outs(graph, model, target_class)
                 local_dict_results['GNN_outs'].append(gnn_out)
-            score = ce_score_fct(ce_here, local_dict_results['GNN_outs'], lambdaone, lambdatwo)
+            # end_time = time.time()
+            # print(end_time-start_time)
+            score = ce_score_fct(ce_here, local_dict_results['GNN_outs'], lambdaone, lambdatwo, aggregate=aggr_fct)
             local_dict_results['score'] = score
             new_list.append(local_dict_results)
         list_results = sorted(list_results + new_list, key=lambda x: x['score'], reverse=True)[:number_of_ces]
@@ -264,12 +269,37 @@ def calc_fid_acc_top_results(list_results, model, target_class, dataset):
     if isinstance(target_class, OWLClassExpression):
         target_class = remove_front(target_class.to_string_id())
     for rdict in list_results:
-        fidelity = fidelity_ce_testdata(datasetfid=dataset, modelfid=model,
-                                        ce_for_fid=rdict['CE'], node_type_expl=target_class, label_expl=-1)
+        fidelity = fidelity_el(ce=rdict['CE'], dataset=dataset,
+                               node_type_to_expl=target_class, model=model, label_to_expl=1)
+        # fidelity = fidelity_ce_testdata(datasetfid=dataset, modelfid=model,
+        #                                ce_for_fid=rdict['CE'], node_type_expl=target_class, label_expl=-1)
 
-        accuracy = ce_confusion_iterative(rdict['CE'], dataset, [target_class, 0])
+        # accuracy = ce_confusion_iterative(rdict['CE'], dataset, [target_class, 0])
         rdict['fidelity'] = fidelity
+        accuracy_class_instance = Accuracy_El()
+        accuracy = accuracy_class_instance.ce_accuracy_to_house(rdict['CE'])
         rdict['accuracy'] = accuracy
+
+    # test this function and delete later!!
+    class_3 = OWLClass(IRI(NS, '3'))
+    class_2 = OWLClass(IRI(NS, '2'))
+    class_1 = OWLClass(IRI(NS, '1'))
+    class_0 = OWLClass(IRI(NS, '0'))
+    edge = OWLObjectProperty(IRI(NS, 'to'))
+    edge_to_one = OWLObjectSomeValuesFrom(property=edge, filler=class_1)
+    edge_to_two = OWLObjectSomeValuesFrom(property=edge, filler=class_2)
+    edge_to_two_to_one = OWLObjectSomeValuesFrom(
+        property=edge, filler=OWLObjectIntersectionOf([class_2, edge_to_one]))
+    edge_to_two_to_one_to_one = OWLObjectSomeValuesFrom(
+        property=edge, filler=OWLObjectIntersectionOf([class_2, edge_to_two_to_one]))
+    three_to_two_to_one_to_one = OWLObjectIntersectionOf([class_3, edge_to_two_to_one_to_one])
+    ce2 = three_to_two_to_one_to_one
+    fidelity2 = fidelity_el(ce=ce2, dataset=dataset, node_type_to_expl=target_class, model=model, label_to_expl=1)
+    print('Fidelity of the 3-2-1-1 CE is: ', fidelity2)
+    ce_three_2 = OWLObjectIntersectionOf([class_3, edge_to_two])
+    fidelity3 = fidelity_el(ce=ce_three_2, dataset=dataset,
+                            node_type_to_expl=target_class, model=model, label_to_expl=1)
+    print('Fidelity of 3-2: ', fidelity3)
     return list_results
 
 
@@ -314,11 +344,10 @@ def beam_and_calc_and_output(hd, model, target_class, start_length, end_length,
         number_of_ces (int): Number of candidate entities to consider.
         number_of_graphs (int): Number of graphs to generate.
         top_results (int): Number of top results to output.
-
     Returns:
         None
     """
-    if save_ces:
+    if save_ces:  # Debugging: if True, creates new CEs and save the CEs to hard disk
         list_results = beam_search(hd, model, target_class, start_length, end_length,
                                    number_of_ces, number_of_graphs, num_top_results)
     # For Debug: Save to hard disk and load again
@@ -335,9 +364,154 @@ def beam_and_calc_and_output(hd, model, target_class, start_length, end_length,
     output_top_results(list_results, target_class, hd.node_types)
 
 
+# -----------------  Test new Datasets and then delete this part -----------------------
+
+
+def test_new_datasets():
+    # test the new datasets
+    # create BA Graph
+    ba_graph_nx = GenerateRandomGraph.create_BAGraph_nx(num_nodes=500, num_edges=3)
+    motif = {
+        'labels': ['1', '2', '3', '4', '5'],
+        'edges': [(0, 1), (0, 2), (0, 3), (0, 4)]
+    }
+    motif_house_letters = {
+        'labels': ['A', 'B', 'B', 'C', 'C'],
+        'edges': [(0, 1), (0, 2), (1, 2), (1, 3), (2, 4), (3, 4)]
+    }
+    type_to_classify = '3'
+    synthetic_graph_class = GraphMotifAugmenter(motif='house', num_motifs=100, orig_graph=ba_graph_nx)
+    synthetic_graph = synthetic_graph_class.graph
+    # Workaround, fix later
+
+    dataset_class = HeteroBAMotifDataset(synthetic_graph, type_to_classify)
+    dataset_class.augmenter = synthetic_graph_class
+    dataset = dataset_class._convert_labels_to_node_types()
+    print(dataset)
+    return dataset
+
+
+def train_gnn_on_dataset(dataset):
+    # ensure: out_channels = 2
+    # train GNN on dataset
+    """
+    # example test
+    bashapes = create_hetero_ba_houses(500, 100)
+    dataset = bashapes
+    dataset.num_node_types = 4
+    dataset.type_to_classify = '3'
+    dataset.type_to_classify = str(dataset.type_to_classify)  # to avoid errors
+    # end example test
+    """
+
+    model = HeteroGNNModel(dataset.metadata(), hidden_channels=16, out_channels=2,
+                           node_type=dataset.type_to_classify, num_layers=2)
+    model_trainer = HeteroGNNTrainer(model, dataset, learning_rate=0.01)
+    model = model_trainer.train(epochs=100)
+    # modelHeteroBSM = bsm.train_GNN(train_new_GNN, dataset, layers=layers)
+    # modelHeteroBSM.eval()
+    # end debug
+    # not working still ....
+
+    # start new debug: evaluate model on own dataset
+    model.eval()
+    return model
+
+
+def dataset_debug():
+    ba_graph_nx = GenerateRandomGraph.create_BAGraph_nx(num_nodes=500, num_edges=2)
+    motif = 'house'
+    type_to_classify = '3'
+    synthetic_graph_class = GraphMotifAugmenter(motif=motif, num_motifs=2, orig_graph=ba_graph_nx)
+    synthetic_graph = synthetic_graph_class.graph
+    dataset_class = HeteroBAMotifDataset(synthetic_graph, type_to_classify)
+    dataset = dataset_class._convert_labels_to_node_types()
+    print(dataset)
+    return dataset
+
+
+def dataset_bashapes():
+    bashapes = create_hetero_ba_houses(50, 10)
+    dataset = bashapes
+    dataset.num_node_types = 4
+    dataset.type_to_classify = '3'
+    dataset.type_to_classify = str(dataset.type_to_classify)  # to avoid errors
+    return dataset
+
+
+# test ce_creation
+test_ce_new_datasets = True
+if test_ce_new_datasets:
+    delete_files_in_folder('content/plots')
+    dataset = test_new_datasets()
+    model = train_gnn_on_dataset(dataset)
+    out = model(dataset.x_dict, dataset.edge_index_dict)  # this works perfectly
+    test_gt = True
+    if test_gt:
+        beam_and_calc_and_output(hd=dataset, model=model, target_class='3',
+                                 start_length=2, end_length=end_length,
+                                 number_of_ces=number_of_ces, number_of_graphs=number_of_graphs,
+                                 num_top_results=num_top_results)
+        HeteroBAMotifDataset.print_statistics_to_dataset(dataset)
+
+    if test_gt:
+        # create CE
+        class_3 = OWLClass(IRI(NS, '3'))
+        class_2 = OWLClass(IRI(NS, '2'))
+        class_1 = OWLClass(IRI(NS, '1'))
+        class_0 = OWLClass(IRI(NS, '0'))
+        edge = OWLObjectProperty(IRI(NS, 'to'))
+        edge_to_one = OWLObjectSomeValuesFrom(property=edge, filler=class_1)
+        edge_to_two = OWLObjectSomeValuesFrom(property=edge, filler=class_2)
+        edge_to_two_to_one = OWLObjectSomeValuesFrom(
+            property=edge, filler=OWLObjectIntersectionOf([class_2, edge_to_one]))
+        # 3 - (intersection(2, -2,-1))
+        gt_ce = OWLObjectIntersectionOf(
+            [class_3,
+             OWLObjectSomeValuesFrom(property=edge, filler=OWLObjectIntersectionOf([class_2, edge_to_one, edge_to_two])), edge_to_two_to_one])
+        print('Here we print the Ce')
+        print(dlsr.render(gt_ce))
+        # score for gt CE:
+        ce_3_2 = OWLObjectIntersectionOf([class_3, edge_to_two])
+        ce_3 = class_3
+        for ce_ in [ce_3_2, gt_ce]:
+            hd = dataset
+            node_types = []
+            metagraph = hd.edge_types  # [str,str,str]
+            edge_ces = []
+            target_class = '3'
+            number_of_ces = 1
+            number_of_graphs = 10
+            num_top_results = 1
+
+            for mp in metagraph:
+                edge_ces.append([OWLObjectProperty(IRI(NS, mp[1]))])
+            for nt in hd.node_types:
+                assert isinstance(nt, str), (nt, "This is not a string, but should be")
+                nt_str = str(nt)  # debugging: Ensure only strings are used
+                node_types.append(OWLClass(IRI(NS, nt_str)))
+            list_results = []
+            for _ in range(number_of_ces):
+                local_dict_results = dict()
+                ce_here = ce_
+                assert isinstance(ce_here, OWLClassExpression), (ce_here, "This is not a Class Expression")
+                local_dict_results['CE'] = ce_here
+                list_graphs = get_number_of_hdata(ce_here, hd, num_graph_hdata=number_of_graphs)
+                local_dict_results['graphs'] = list_graphs
+                local_dict_results['GNN_outs'] = list()
+                for graph in list_graphs:
+                    gnn_out = get_gnn_outs(graph, model, target_class)
+                    local_dict_results['GNN_outs'].append(gnn_out)
+                score = ce_score_fct(ce_here, local_dict_results['GNN_outs'], lambdaone, lambdatwo)
+                local_dict_results['score'] = score
+                list_results.append(local_dict_results)
+                list_results = top_unique_scores(list_results, num_top_results)
+                list_results = calc_fid_acc_top_results(list_results, model, target_class, hd)
+                output_top_results(list_results, target_class, hd.node_types)
+            print(list_results)
+
+
 # ------------------  Testing Zone -----------------------
-
-
 '''
 ce_test_here = create_test_ce_3011()[1] #3-1-2
 #print(919, dlsr.render(ce_test))
@@ -354,18 +528,6 @@ list_3011 = ['Intersection', ['3'], ['to', ['Intersection', ['0'], ['to', ['Inte
 '''
 
 
-# ----------------- Test, to create a test CE, and a test graph.
-class_3 = OWLClass(IRI(NS, '3'))
-class_2 = OWLClass(IRI(NS, '2'))
-class_1 = OWLClass(IRI(NS, '1'))
-class_0 = OWLClass(IRI(NS, '0'))
-edge = OWLObjectProperty(IRI(NS, 'to'))
-test_ce = random_ce_with_startnode(6, class_0, [class_0, class_1], [edge])
-# graph_to_test_ce = create_graphdict_from_ce(test_ce, ['0', '1'], ['to'], [(
-#   '0', 'to', '1'), ('1', 'to', '0'), ('0', 'to', '0'), ('1', 'to', '1')])
-# print(graph_to_test_ce)
-
-
 # ---------------------- evaluation DBLP
 # this does not work accordingly
 
@@ -379,6 +541,7 @@ if run_DBLP:
 
 
 # ---------------------- evaluation HeteroBAShapes
+# run_BAShapes = True
 if run_BAShapes:
     bashapes = create_hetero_ba_houses(500, 100)  # TODO: Save BAShapes to some file, code already somewhere
     delete_files_in_folder('content/plots')
@@ -410,3 +573,6 @@ if run_BAShapes:
     # modelHeteroBSM = bsm.train_GNN(True, bashapes, layers=4)
     # create_ce_and_graphs_to_heterodataset(bashapes, modelHeteroBSM, 'HeteroBAShapes_BA4hop', '3', cat_to_explain=-1,
     #                                      graphs_per_ce=16, iterations=iterations, compute_acc=True, random_seed=random_seed)
+
+
+# ------------ Testing zone for CEs
